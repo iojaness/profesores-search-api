@@ -1,0 +1,16 @@
+{
+  "name": "profesores-search-api",
+  "version": "1.0.0",
+  "description": "Microservicio de consulta de docentes (MySQL)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --env-file=.env index.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-dist": "^5.17.14"
+  }
+}
