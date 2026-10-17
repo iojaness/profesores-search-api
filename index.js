@@ -8,6 +8,8 @@ const spec = require('./swagger');
 const PORT = process.env.PORT || 3000;
 const CORS = { 'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*' };
 const UI_DIR = swaggerUiDist.getAbsoluteFSPath();
+const fruits = require('./services/fruits');
+const pokemon = require('./services/pokemon');
 
 const MIME = {
   '.css': 'text/css; charset=utf-8',
@@ -208,6 +210,25 @@ async function profe(res, rutaCompleta) {
 // ---------- Servidor ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  async function extraRoutes(req, res, url) {
+    const p = url.pathname;
+    try {
+      if (req.method !== 'GET') return false;
+      if (p === '/api/fruit')
+        return send(res, 200, await fruits.listFruits()), true;
+      let m = p.match(/^\/api\/fruit\/([^/]+)$/);
+      if (m) return send(res, 200, await fruits.getFruit(decodeURIComponent(m[1]))), true;
+
+      if (p === '/api/pokemon')
+        return send(res, 200, await pokemon.listPokemon(Object.fromEntries(url.searchParams))), true;
+      m = p.match(/^\/api\/pokemon\/([^/]+)$/);
+      if (m) return send(res, 200, await pokemon.getPokemon(decodeURIComponent(m[1]))), true;
+    } catch (e) {
+      send(res, e.status || 500, { error: e.message });
+      return true;
+    }
+    return false; // no coincidió: sigue con tus rutas de profesores
+  }
   const ruta = url.pathname;
 
   try {
