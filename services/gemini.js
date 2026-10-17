@@ -22,7 +22,7 @@ async function preguntar(prompt) {
       systemInstruction: { parts: [{ text: SISTEMA }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
         thinkingConfig: { thinkingLevel: 'low' }, // ver nota abajo
       },
     }),
