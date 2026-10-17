@@ -2,7 +2,7 @@ const mysql = require('../db');                       // MySQL (docentes)
 const pg = require('../db-pg');                       // Postgres (pokémon)
 const { fruitsCollection } = require('../db-mongo');  // Mongo (frutas)
 
-const TTL = 5 * 60 * 1000; // refresca los nombres cada 5 min
+const TTL = 3 * 1000; // refresca los nombres cada 3 segundos
 let cache = null;
 let cacheAt = 0;
 let loading = null;
