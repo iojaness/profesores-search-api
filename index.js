@@ -6,6 +6,7 @@ const pool = require('./db');
 const spec = require('./swagger');
 const fruits = require('./services/fruits');
 const pokemon = require('./services/pokemon');
+const gemini = require('./services/gemini');
 
 const PORT = process.env.PORT || 3000;
 const CORS = { 'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*' };
@@ -86,6 +87,38 @@ async function findProfesor(nombre) {
   } catch (e) {
     console.error(e);
     return { ok: false, error: 'Error al consultar la base de datos' };
+  }
+}
+
+function leerJson(req, max = 20_000) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (c) => {
+      raw += c;
+      if (raw.length > max) { reject(Object.assign(new Error('Body demasiado grande'), { status: 413 })); req.destroy(); }
+    });
+    req.on('end', () => {
+      try { resolve(raw ? JSON.parse(raw) : {}); }
+      catch { reject(Object.assign(new Error('JSON inválido'), { status: 400 })); }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function ia(req, res) {
+  try {
+    const { prompt } = await leerJson(req);
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return responder(res, 400, { ok: false, error: 'Falta el campo "prompt"' });
+    }
+    if (prompt.length > 4000) {
+      return responder(res, 400, { ok: false, error: 'El prompt es demasiado largo (máx. 4000 caracteres)' });
+    }
+    const texto = await gemini.preguntar(prompt.trim());
+    responder(res, 200, { ok: true, texto });
+  } catch (e) {
+    console.error(e);
+    responder(res, e.status || 500, { ok: false, error: e.message });
   }
 }
 
@@ -308,11 +341,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         ...CORS,
-        'Access-Control-Allow-Methods': 'GET,OPTIONS',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       return res.end();
     }
+
+    if (req.method === 'POST' && ruta === '/api/ia') return await ia(req, res);
 
     if (req.method !== 'GET') {
       return responder(res, 405, { ok: false, error: 'Método no permitido' });
