@@ -7,6 +7,7 @@ const spec = require('./swagger');
 const fruits = require('./services/fruits');
 const pokemon = require('./services/pokemon');
 const gemini = require('./services/gemini');
+const { detectar } = require('./services/detector');
 
 const PORT = process.env.PORT || 3000;
 const CORS = { 'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*' };
@@ -87,38 +88,6 @@ async function findProfesor(nombre) {
   } catch (e) {
     console.error(e);
     return { ok: false, error: 'Error al consultar la base de datos' };
-  }
-}
-
-function leerJson(req, max = 20_000) {
-  return new Promise((resolve, reject) => {
-    let raw = '';
-    req.on('data', (c) => {
-      raw += c;
-      if (raw.length > max) { reject(Object.assign(new Error('Body demasiado grande'), { status: 413 })); req.destroy(); }
-    });
-    req.on('end', () => {
-      try { resolve(raw ? JSON.parse(raw) : {}); }
-      catch { reject(Object.assign(new Error('JSON inválido'), { status: 400 })); }
-    });
-    req.on('error', reject);
-  });
-}
-
-async function ia(req, res) {
-  try {
-    const { prompt } = await leerJson(req);
-    if (typeof prompt !== 'string' || !prompt.trim()) {
-      return responder(res, 400, { ok: false, error: 'Falta el campo "prompt"' });
-    }
-    if (prompt.length > 4000) {
-      return responder(res, 400, { ok: false, error: 'El prompt es demasiado largo (máx. 4000 caracteres)' });
-    }
-    const texto = await gemini.preguntar(prompt.trim());
-    responder(res, 200, { ok: true, texto });
-  } catch (e) {
-    console.error(e);
-    responder(res, e.status || 500, { ok: false, error: e.message });
   }
 }
 
@@ -330,6 +299,83 @@ async function extraRoutes(res, url) {
     return true;
   }
   return false;
+}
+
+// ---------- IA (Gemini) ----------
+
+function leerJson(req, max = 20_000) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (c) => {
+      raw += c;
+      if (raw.length > max) {
+        reject(Object.assign(new Error('Body demasiado grande'), { status: 413 }));
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(Object.assign(new Error('JSON inválido'), { status: 400 }));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+/**
+ * @openapi
+ * /api/ia:
+ *   post:
+ *     summary: Pregunta a la IA sobre un docente, fruta o Pokémon registrado
+ *     description: Solo consulta a Gemini si el prompt menciona algo que existe en las bases de datos.
+ *     tags: [IA]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [prompt]
+ *             properties:
+ *               prompt:
+ *                 type: string
+ *                 example: ¿Qué tipo de Pokémon es pikachu?
+ *     responses:
+ *       200:
+ *         description: Respuesta (ia=false si no se consultó a Gemini)
+ *       400:
+ *         description: Prompt inválido
+ *       502:
+ *         description: Error al consultar Gemini
+ */
+async function ia(req, res) {
+  try {
+    const { prompt } = await leerJson(req);
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return responder(res, 400, { ok: false, error: 'Falta el campo "prompt"' });
+    }
+    if (prompt.length > 4000) {
+      return responder(res, 400, { ok: false, error: 'El prompt es demasiado largo (máx. 4000 caracteres)' });
+    }
+
+    const coincidencias = await detectar(prompt);
+    if (coincidencias.length === 0) {
+      return responder(res, 200, {
+        ok: true,
+        ia: false,
+        coincidencias: [],
+        texto: 'Solo puedo responder preguntas sobre docentes, frutas del diablo o Pokémon registrados en la db.',
+      });
+    }
+
+    const texto = await gemini.preguntar(prompt.trim());
+    responder(res, 200, { ok: true, ia: true, coincidencias, texto });
+  } catch (e) {
+    console.error(e);
+    responder(res, e.status || 500, { ok: false, error: e.message });
+  }
 }
 
 // ---------- Servidor ----------
