@@ -14,6 +14,31 @@ const FULL = `
                    FROM pokemon_forms f WHERE f.pokemon_id = p.id), '[]') AS forms
   FROM pokemon p`;
 
+function toApi(r) {
+  const s = r.stats || {};
+  return {
+    id: r.id,
+    name: r.name,
+    height: r.height,
+    weight: r.weight,
+    image: r.image,
+    types: r.types,
+    moves: r.moves.length ? r.moves : ['NA'],
+    stats: {
+      hp: s.hp ?? 0,
+      attack: s.attack ?? 0,
+      defense: s.defense ?? 0,
+      specialAttack: s.special_attack ?? 0,
+      specialDefense: s.special_defense ?? 0,
+      speed: s.speed ?? 0,
+    },
+    hasGenderDifference: r.has_gender_difference,
+    imageFemale: r.image_female,
+    hasAlternateForms: r.has_alternate_forms,
+    forms: r.forms,
+  };
+}
+
 async function listPokemon({ limit = 50, offset = 0, type } = {}) {
   limit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   offset = Math.max(parseInt(offset, 10) || 0, 0);
@@ -51,32 +76,7 @@ async function getPokemon(query) {
     err.status = 404;
     throw err;
   }
-  
-  function toApi(r) {
-    const s = r.stats || {};
-    return {
-        id: r.id,
-        name: r.name,
-        height: r.height,
-        weight: r.weight,
-        image: r.image,
-        types: r.types,                                  // ['fire', 'flying']
-        moves: r.moves.length ? r.moves : ['NA'],        // tu UI pinta 'NA' como "sin movimientos"
-        stats: {
-        hp: s.hp ?? 0,
-        attack: s.attack ?? 0,
-        defense: s.defense ?? 0,
-        specialAttack: s.special_attack ?? 0,
-        specialDefense: s.special_defense ?? 0,
-        speed: s.speed ?? 0,
-        },
-        hasGenderDifference: r.has_gender_difference,
-        imageFemale: r.image_female,
-        hasAlternateForms: r.has_alternate_forms,
-        forms: r.forms,                                  // [{ name, image }]
-    };
-    }
-    return toApi(rows[0]);
+  return toApi(rows[0]);
 }
 
 module.exports = { listPokemon, getPokemon };

@@ -4,12 +4,12 @@ const path = require('node:path');
 const swaggerUiDist = require('swagger-ui-dist');
 const pool = require('./db');
 const spec = require('./swagger');
+const fruits = require('./services/fruits');
+const pokemon = require('./services/pokemon');
 
 const PORT = process.env.PORT || 3000;
 const CORS = { 'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*' };
 const UI_DIR = swaggerUiDist.getAbsoluteFSPath();
-const fruits = require('./services/fruits');
-const pokemon = require('./services/pokemon');
 
 const MIME = {
   '.css': 'text/css; charset=utf-8',
@@ -207,28 +207,101 @@ async function profe(res, rutaCompleta) {
   responder(res, result.ok ? 200 : 500, result);
 }
 
+/**
+ * @openapi
+ * /api/fruit:
+ *   get:
+ *     summary: Lista todas las frutas del diablo
+ *     tags: [Frutas]
+ *     responses:
+ *       200:
+ *         description: Lista de frutas
+ * /api/fruit/{query}:
+ *   get:
+ *     summary: Busca una fruta por nombre o número
+ *     tags: [Frutas]
+ *     parameters:
+ *       - in: path
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: mera
+ *     responses:
+ *       200:
+ *         description: Fruta encontrada
+ *       404:
+ *         description: Fruta no encontrada
+ * /api/pokemon:
+ *   get:
+ *     summary: Lista Pokémon (paginado)
+ *     tags: [Pokémon]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de Pokémon
+ * /api/pokemon/{query}:
+ *   get:
+ *     summary: Busca un Pokémon por nombre o número
+ *     tags: [Pokémon]
+ *     parameters:
+ *       - in: path
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: pikachu
+ *     responses:
+ *       200:
+ *         description: Pokémon encontrado
+ *       404:
+ *         description: Pokémon no encontrado
+ */
+async function extraRoutes(res, url) {
+  const p = url.pathname;
+  try {
+    if (p === '/api/fruit') {
+      responder(res, 200, await fruits.listFruits());
+      return true;
+    }
+    let m = p.match(/^\/api\/fruit\/([^/]+)$/);
+    if (m) {
+      responder(res, 200, await fruits.getFruit(decodeURIComponent(m[1])));
+      return true;
+    }
+
+    if (p === '/api/pokemon') {
+      responder(res, 200, await pokemon.listPokemon(Object.fromEntries(url.searchParams)));
+      return true;
+    }
+    m = p.match(/^\/api\/pokemon\/([^/]+)$/);
+    if (m) {
+      responder(res, 200, await pokemon.getPokemon(decodeURIComponent(m[1])));
+      return true;
+    }
+  } catch (e) {
+    console.error(e);
+    responder(res, e.status || 500, { ok: false, error: e.message });
+    return true;
+  }
+  return false;
+}
+
 // ---------- Servidor ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  async function extraRoutes(req, res, url) {
-    const p = url.pathname;
-    try {
-      if (req.method !== 'GET') return false;
-      if (p === '/api/fruit')
-        return send(res, 200, await fruits.listFruits()), true;
-      let m = p.match(/^\/api\/fruit\/([^/]+)$/);
-      if (m) return send(res, 200, await fruits.getFruit(decodeURIComponent(m[1]))), true;
-
-      if (p === '/api/pokemon')
-        return send(res, 200, await pokemon.listPokemon(Object.fromEntries(url.searchParams))), true;
-      m = p.match(/^\/api\/pokemon\/([^/]+)$/);
-      if (m) return send(res, 200, await pokemon.getPokemon(decodeURIComponent(m[1]))), true;
-    } catch (e) {
-      send(res, e.status || 500, { error: e.message });
-      return true;
-    }
-    return false; // no coincidió: sigue con tus rutas de profesores
-  }
   const ruta = url.pathname;
 
   try {
@@ -264,6 +337,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (ruta.startsWith('/profe/')) return await profe(res, ruta);
+
+    if (await extraRoutes(res, url)) return;
 
     responder(res, 404, { ok: false, error: 'No encontrado' });
   } catch (err) {
