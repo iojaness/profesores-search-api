@@ -21,7 +21,10 @@ async function preguntar(prompt) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SISTEMA }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 400 },
+      generationConfig: {
+        maxOutputTokens: 2048,
+        thinkingConfig: { thinkingLevel: 'low' }, // ver nota abajo
+      },
     }),
     signal: AbortSignal.timeout(30_000),
   });
