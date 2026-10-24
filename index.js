@@ -7,6 +7,7 @@ const spec = require('./swagger');
 const fruits = require('./services/fruits');
 const pokemon = require('./services/pokemon');
 const gemini = require('./services/gemini');
+const proveedoresIa = require('./services/proveedoresIa');
 const { detectar } = require('./services/detector');
 
 const PORT = process.env.PORT || 3000;
@@ -342,22 +343,56 @@ function leerJson(req, max = 20_000) {
  *               prompt:
  *                 type: string
  *                 example: ¿Qué tipo de Pokémon es pikachu?
+ *               proveedor:
+ *                 type: string
+ *                 enum: [gemini, groq, openrouter]
+ *                 default: gemini
+ *                 description: Servicio de IA a usar
+ *               timeoutMs:
+ *                 type: integer
+ *                 description: Tiempo máximo de espera en ms (5000 a 160000; por defecto 40000)
+ *                 example: 40000
  *     responses:
  *       200:
  *         description: Respuesta (ia=false si no se consultó a Gemini)
  *       400:
  *         description: Prompt inválido
  *       502:
- *         description: Error al consultar Gemini
+ *         description: Error al consultar el proveedor de IA
+ *       503:
+ *         description: Proveedor no configurado en el servidor
+ *       504:
+ *         description: El proveedor no respondió a tiempo
  */
+// Datos de lo detectado en el prompt, para los proveedores que no usan services/gemini.js
+async function obtenerContexto(coincidencias) {
+  const partes = [];
+  for (const c of coincidencias.slice(0, 5)) {
+    try {
+      let datos;
+      if (c.tipo === 'pokemon') datos = await pokemon.getPokemon(c.nombre);
+      else if (c.tipo === 'fruta') datos = await fruits.getFruit(c.nombre);
+      else if (c.tipo === 'docente') datos = await findProfesor(c.nombre);
+      if (datos) partes.push({ tipo: c.tipo, nombre: c.nombre, datos });
+    } catch (e) {
+      console.error('contexto IA', c, e.message);
+    }
+  }
+  return JSON.stringify(partes).slice(0, 12_000);
+}
+
 async function ia(req, res) {
   try {
-    const { prompt } = await leerJson(req);
+    const { prompt, proveedor = 'gemini', timeoutMs } = await leerJson(req);
     if (typeof prompt !== 'string' || !prompt.trim()) {
       return responder(res, 400, { ok: false, error: 'Falta el campo "prompt"' });
     }
     if (prompt.length > 4000) {
       return responder(res, 400, { ok: false, error: 'El prompt es demasiado largo (máx. 4000 caracteres)' });
+    }
+
+    if (typeof proveedor !== 'string' || !proveedoresIa.PROVEEDORES[proveedor]) {
+      return responder(res, 400, { ok: false, error: 'Proveedor de IA no válido' });
     }
 
     const coincidencias = await detectar(prompt);
@@ -370,8 +405,14 @@ async function ia(req, res) {
       });
     }
 
-    const texto = await gemini.preguntar(prompt.trim());
-    responder(res, 200, { ok: true, ia: true, coincidencias, texto });
+    const texto = await proveedoresIa.preguntar({
+      proveedor,
+      prompt: prompt.trim(),
+      timeoutMs,
+      gemini,
+      contexto: proveedor === 'gemini' ? undefined : await obtenerContexto(coincidencias),
+    });
+    responder(res, 200, { ok: true, ia: true, proveedor, coincidencias, texto });
   } catch (e) {
     console.error(e);
     responder(res, e.status || 500, { ok: false, error: e.message });
