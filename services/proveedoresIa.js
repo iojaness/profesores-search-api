@@ -56,7 +56,7 @@ async function chatCompatible(p, { prompt, contexto, ms }) {
 
   const system =
     'Eres un asistente que responde en español, de forma clara y breve, usando formato Markdown. ' +
-    'Responde con base en los datos del contexto; si lo que se pregunta no está en el contexto, buscalo en internet.' +
+    'Responde con base en los datos del contexto; si lo que se pregunta no está en el contexto, buscalo en internet si tiene que ver con el contexto, si no, di que no puedes suministrar esa información porque no tiene que ver con la informacion disponible en la app.' +
     (contexto ? `\n\nContexto (datos registrados):\n${contexto}` : '');
 
   const ctrl = new AbortController();
